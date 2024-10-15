@@ -13,6 +13,7 @@ from docx.oxml.shared import OxmlElement, qn
 import logging
 import argparse
 import html
+import frontmatter
 
 _FONT_NAME = None
 _FONT_COLOR = RGBColor(0, 0, 0)
@@ -287,10 +288,10 @@ def main():
             "set stdout"
     )
     parser.add_argument(
-        "--title", default="TITLE", type=str, help="Title of the piece. Defaults to placeholder value.",
+        "--title", default=None, type=str, help="Title of the piece. Defaults to placeholder value.",
     )
     parser.add_argument(
-        "--author", default="AUTHOR", type=str, help="Author of the piece. Defaults to placeholder value.",
+        "--author", default=None, type=str, help="Author of the piece. Defaults to placeholder value.",
     )
     parser.add_argument(
         "--header-title", default=None, type=str,
@@ -307,14 +308,6 @@ def main():
 
     args = parser.parse_args()
 
-    if args.header_author is None:
-        args.header_author = _default_header_author(args.author)
-
-    if args.header_title is None:
-        args.header_title = _default_header_title(args.title)
-
-    args.contact = _DEFAULT_CONTACT
-
     match args.format:
         case "modern":
             _FONT_NAME = "Times New Roman"
@@ -324,25 +317,55 @@ def main():
             raise Exception("Unexpected format: " + args.format)
 
     if args.input == '-':
-        content = sys.stdin.read()
+        input_string = sys.stdin.read()
     else:
         with open(args.input, "r") as f:
-            content = _replace_quotes(f.read())
+            input_string = f.read()
 
-    word_count = int(math.ceil(len(content.split()) / 100) * 100)
-    word_count_formatted = f'{word_count:,}'
+    post = frontmatter.loads(input_string)
 
-    _DOCUMENT = Document()
     _VARIABLES = {
-        "title": args.title,
-        "author": args.author,
-        "header_title": args.header_title,
-        "header_author": args.header_author,
-        "word_count": word_count_formatted,
+        "title": "TITLE",
+        "author": "AUTHOR",
+        "header_title": "TITLE",
+        "header_author": "AUTHOR",
+        "word_count": 0,
         "contact": _DEFAULT_CONTACT
     }
 
-    md(content)
+    if "title" in post:
+        _VARIABLES["title"] = post["title"]
+    if args.title is not None:
+        _VARIABLES["title"] = args.title
+
+    if "author" in post:
+        _VARIABLES["author"] = post["author"]
+    if args.title is not None:
+        _VARIABLES["author"] = args.author
+
+    if "header-title" in post:
+        _VARIABLES["header_title"] = post["header-title"]
+    if args.header_author is not None:
+        _VARIABLES["header_title"] = args.header_title
+
+    _VARIABLES["header_author"] = _default_header_author(_VARIABLES["author"])
+    if "header-author" in post:
+        _VARIABLES["header_author"] = post["header-author"]
+    if args.header_author is not None:
+        _VARIABLES["header_author"] = args.header_author
+
+    if "contact" in post:
+        _VARIABLES["contact"] = post["contact"]
+
+    content = post.content
+
+    word_count = int(math.ceil(len(content.split()) / 100) * 100)
+    word_count_formatted = f'{word_count:,}'
+    _VARIABLES["word_count"] = word_count_formatted
+
+    _DOCUMENT = Document()
+
+    md(_replace_quotes(content))
     output_file = _compute_output_file(args)
     if output_file == sys.stdout:
         with os.fdopen(sys.stdout.fileno(), "wb", closefd=False) as out:

@@ -2,3 +2,4 @@ lxml==4.9.4
 marko==2.0.3
 python-docx==0.8.11
 pyinstaller==6.10.0
+python-frontmatter==1.1.0
