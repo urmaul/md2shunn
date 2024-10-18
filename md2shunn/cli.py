@@ -271,6 +271,9 @@ def _compute_output_file(args):
         input_wo_ext, _ = os.path.splitext(args.input)
         return input_wo_ext + ".docx"
 
+def _updated_with(variables, configuration):
+    return { k: configuration.get(k, v) for k, v in variables.items() }
+
 def main():
     # Workarounds for custom Markdown renderer.
     global _VARIABLES, _DOCUMENT, _FONT_NAME
@@ -305,6 +308,10 @@ def main():
         "--format", default="modern", type=str, choices=["modern", "classic"],
         help="Use 'modern' (variable-width) or 'classic' (fixed-width) font. Defaults to 'modern'",
     )
+    parser.add_argument(
+        "--config", default=None, type=str,
+        help="Markdown input file to be used as a source of default metadata",
+    )
 
     args = parser.parse_args()
 
@@ -316,52 +323,48 @@ def main():
         case _:
             raise Exception("Unexpected format: " + args.format)
 
+    # Read input file
+
     if args.input == '-':
         input_string = sys.stdin.read()
     else:
         with open(args.input, "r") as f:
             input_string = f.read()
 
-    post = frontmatter.loads(input_string)
+    metadata, content = frontmatter.parse(input_string)
+
+    # Read config file
+
+    config = {}
+    if args.config is not None:
+        with open(args.config, "r") as f:
+            config = frontmatter.load(f)
+
+    # Apply configurarion
 
     _VARIABLES = {
         "title": "TITLE",
         "author": "AUTHOR",
-        "header_title": "TITLE",
-        "header_author": "AUTHOR",
+        "header_title": None,
+        "header_author": None,
         "word_count": 0,
         "contact": _DEFAULT_CONTACT
     }
+    _VARIABLES = _updated_with(_VARIABLES, config)
+    _VARIABLES = _updated_with(_VARIABLES, metadata)
+    _VARIABLES = _updated_with(_VARIABLES, {k: v for k, v in vars(args).items() if v is not None})
 
-    if "title" in post:
-        _VARIABLES["title"] = post["title"]
-    if args.title is not None:
-        _VARIABLES["title"] = args.title
-
-    if "author" in post:
-        _VARIABLES["author"] = post["author"]
-    if args.title is not None:
-        _VARIABLES["author"] = args.author
-
-    if "header-title" in post:
-        _VARIABLES["header_title"] = post["header-title"]
-    if args.header_author is not None:
-        _VARIABLES["header_title"] = args.header_title
-
-    _VARIABLES["header_author"] = _default_header_author(_VARIABLES["author"])
-    if "header-author" in post:
-        _VARIABLES["header_author"] = post["header-author"]
-    if args.header_author is not None:
-        _VARIABLES["header_author"] = args.header_author
-
-    if "contact" in post:
-        _VARIABLES["contact"] = post["contact"]
-
-    content = post.content
+    if _VARIABLES["header_title"] is None:
+        _VARIABLES["header_title"] = _default_header_title(_VARIABLES["title"])
+    
+    if _VARIABLES["header_author"] is None:
+        _VARIABLES["header_author"] = _default_header_author(_VARIABLES["author"])
 
     word_count = int(math.ceil(len(content.split()) / 100) * 100)
     word_count_formatted = f'{word_count:,}'
     _VARIABLES["word_count"] = word_count_formatted
+
+    # Convert document
 
     _DOCUMENT = Document()
 
