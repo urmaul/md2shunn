@@ -191,6 +191,16 @@ class __DocRenderer(Renderer):
 
             return
 
+        # Start rendering with emphasis, then pop the style from the stack.
+        elif element_class == "thematic_break":
+            p = self.document.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            run = p.add_run("#")
+            _set_style(run)
+
+            return
+
         # In the default case we ignore the element but still walk its
         # children.
         logging.debug("Ignoring: {}".format(element))
